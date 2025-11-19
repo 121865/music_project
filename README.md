@@ -68,8 +68,9 @@ C:\Users\cj6ru8cl6\Desktop\nschool> .\.venv\Scripts\Activate.ps1
 - `plot_platform_specific_clusterings(df)`：分別對 Spotify/YouTube 做分群並畫熱圖、PCA。
 - `plot_feature_correlations(df)`：欄位與人氣的相關係數與熱圖。
 - `save_fig(name)`：將目前圖表儲存到 `information`，並把路徑加入內部清單以供最後顯示。
-- `show_saved_images_nonblocking()`：將已存的每張 PNG 以獨立視窗同時顯示，並等待 Enter 關閉視窗。  
-**實作流程與結果（依執行順序）**
+- `show_saved_images_nonblocking()`：將已存的每張 PNG 以獨立視窗同時顯示，並等待 Enter 關閉視窗。
+- 
+### **實作流程與結果（依執行順序）**
 
 1. 讀取資料與型別轉換
 	- 使用 `pandas.read_csv()` 讀入 CSV，並對 `Likes`、`Views`、`Stream`、`Valence` 等欄位做 `pd.to_numeric(..., errors='coerce')`。
