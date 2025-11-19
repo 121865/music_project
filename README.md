@@ -14,12 +14,6 @@
 - 各式圖表自動儲存到 `information` 資料夾
 - 最後將每張圖以獨立視窗同時顯示，等待使用者在終端按 Enter 關閉
 
-檔案位置
--
-- 程式: `C:\Users\cj6ru8cl6\Desktop\nschool\music_phase4.py`
-- 輸入 CSV (預設): `C:\Users\cj6ru8cl6\Desktop\nschool\Spotify_Youtube.csv`
-- 圖片輸出資料夾: `C:\Users\cj6ru8cl6\Desktop\nschool\information`
-- 依賴清單（如有）: `C:\Users\cj6ru8cl6\Desktop\nschool\requirements.txt`
 
 先決條件
 -
@@ -75,71 +69,127 @@ C:\Users\cj6ru8cl6\Desktop\nschool> .\.venv\Scripts\Activate.ps1
 - `plot_feature_correlations(df)`：欄位與人氣的相關係數與熱圖。
 - `save_fig(name)`：將目前圖表儲存到 `information`，並把路徑加入內部清單以供最後顯示。
 - `show_saved_images_nonblocking()`：將已存的每張 PNG 以獨立視窗同時顯示，並等待 Enter 關閉視窗。
-
 **程式內容（資料處理方法）**
-- **讀取與型別轉換**：使用 `pandas.read_csv()` 讀入 `Spotify_Youtube.csv`，針對常用欄位（如 `Likes`、`Views`、`Stream`、`Valence` 等）用 `pd.to_numeric(..., errors='coerce')` 轉為數值型別，將無法轉為數字的值變為 `NaN`，方便後續補值。
-- **補值策略（`impute_likes_and_stream`）**：
-	- `Likes`：先計算現有資料中 `Likes/Views` 的平均比率（只含 Views>0），再用該比率乘以 `Views` 去估算缺失的 `Likes`。結果四捨五入並轉成整數類型（`Int64`）。
-	- `Stream`：對有 `Stream` 與 `Views` 的資料計算 `Stream/Views`，以同一 `Artist` 的中位數比率填補該藝人的缺失；若該藝人沒有可用比率，則使用全域中位數。
-	- 補值完會再次列出缺失欄位數量，並保留原始缺失較多（如 `Description`、`Url_youtube`）的狀況供判讀。
-- **數值變換**：
-	- 為了降低極端值的影響，對 `Stream`、`Views` 使用 `log1p`（即 `np.log1p`）產生 `log_Stream` 與 `log_Views`。
-	- 以分箱（10 等分，0~1）對 `Valence` 做群組（`valence_group`），並計算每箱的平均人氣數值（先做平台內 Min–Max 正規化）。
-- **正規化**：`minmax()` 對給定序列做 0–1 線性縮放（若 min==max 或全 NaN 則回傳 0 向量），用於平台內比較（`norm_Stream`, `norm_Views`）。
-- **平衡抽樣**：`balanced_sample_per_mood()` 會對三個情緒類別（Sad / Neutral / Happy）分組，各組隨機抽樣最多 `n` 筆，確保比較時每種情緒在樣本數上平衡。
-- **分群分析（K-Means）**：
-	- 對選定的音訊特徵（`Danceability, Energy, Speechiness, Acousticness, Instrumentalness, Liveness, Valence, Tempo`）先以中位數補缺（僅在平台別分群），再做 `StandardScaler` Z-score 標準化，接著使用 K-Means（預設 k=4）進行分群。
-	- 使用 PCA（2 成分）將高維特徵投影到 2D 作為視覺化（散佈圖），並計算每群的平均特徵與平均人氣（log 轉換）以比較群間差異。
-- **相關性分析**：計算各音訊特徵與人氣（Spotify 的 `Stream`、YouTube 的 `Views`）的 Pearson 相關係數，並用長條圖與熱圖視覺化。
+
+使用 `pandas.read_csv()` 讀入 `Spotify_Youtube.csv`，對下列流程做處理：
+
+- 讀取與型別轉換：針對數值欄位（例：`Likes`, `Views`, `Stream`, `Valence` 等）使用 `pd.to_numeric(..., errors='coerce')`，把不能轉為數值的值設為 `NaN`，以利統一補值處理。
+
+- 補值策略（`impute_likes_and_stream`）：
+	- `Likes`：在有 `Views` 的資料中計算 `Likes/Views` 的比率（排除 `Views == 0`），以該比率乘回 `Views` 去估算缺失的 `Likes`，最後四捨五入並轉成整數型別（`Int64`）。
+	- `Stream`：對每位 `Artist` 計算 `Stream/Views` 的中位數比率，若該藝人有可用比率則以藝人中位數補值，否則用全域中位數作為後備。
+	- 補值後會再列出缺失值統計，以便判讀哪些欄位仍缺資料（例如 `Description`、`Url_youtube` 可能仍大量缺失）。
+
+- 數值變換與正規化：
+	- 為降低長尾影響，對人氣相關欄位使用 `np.log1p()` 產生 `log_Stream` / `log_Views`（用於群內平均比較或點大小顯示）。
+	- 對平台內比較使用 Min–Max 正規化（`minmax()`），輸出 `norm_Stream` / `norm_Views`，範圍 0–1，方便在同一張圖上比較平台差異。
+
+- Valence 分箱與平衡抽樣：
+	- 將 `Valence`（0–1）分成固定數量的箱（預設 10 箱），每箱計算平均人氣以觀察情緒與人氣間的趨勢。
+	- `balanced_sample_per_mood()` 會在每個情緒類別（Sad / Neutral / Happy）內隨機抽樣最多 `n` 筆（預設 `target_n`），以避免某情緒樣本過少造成偏誤。
+
+- 分群與降維：
+	- 對選定音訊特徵（例：`Danceability, Energy, Speechiness, Acousticness, Instrumentalness, Liveness, Valence, Tempo`）先以中位數補缺，再做 `StandardScaler` 標準化。
+	- 使用 K-Means（預設 `k=4`）分群；另提供 Elbow 圖協助選擇適當的 `k`。
+	- 使用 PCA（2 成分）做視覺化投影；在散佈圖中以群編號上色、以人氣（log1p）為點大小以利解釋群體的人氣差異。
+
+	**PCA 補充（PC1 / PC2 與如何列印 loading）**
+
+	PC1 與 PC2 分別為第一與第二主成分，代表資料中變異量最多與次多的方向。若要在程式中直接觀察每個主成分的「解釋變異比例（explained variance ratio）」與原始特徵的 loading（各特徵對主成分的權重），可以在 PCA 計算後列印，例如：
+
+	```python
+	# 假設 X_scaled 為 StandardScaler() 處理後的特徵矩陣，features 為特徵名稱列表
+	from sklearn.decomposition import PCA
+	pca = PCA(n_components=2)
+	X_pca = pca.fit_transform(X_scaled)
+	print('PCA explained variance ratio:', pca.explained_variance_ratio_)
+	print('PC loadings (components):')
+	for i, comp in enumerate(pca.components_, start=1):
+	    print(f'PC{i}:')
+	    for fname, val in zip(features, comp):
+	        print(f'  {fname}: {val:.4f}')
+	```
+
+	輸出會列出 PC1 / PC2 各自解釋的變異比例（例如 0.42, 0.18），以及每個原始特徵在 PC1/PC2 上的 loading（正/負與大小），方便把 PCA 投影圖解釋為「哪些特徵的組合造成了該方向的變異」。
+
+**範例數值（PC1 / PC2）**
+
+下列為最近一次執行程式時產生的 PCA 範例數值，僅作示例用途 — 實際數值會依資料而異。第一表為每個主成分的解釋變異比例，第二表為各特徵在 PC1 / PC2 的 loading（權重）。
+
+PCA 解釋變異比例（Explained Variance Ratio）
+
+| 成分 | Explained variance ratio |
+|---:|:---:|
+| PC1 | 0.3062 |
+| PC2 | 0.1491 |
+
+PCA 各特徵 Loading（示例，取至小數點第四位）
+
+| 特徵 | PC1 | PC2 |
+|---|---:|---:|
+| Danceability | 0.4015 | 0.5381 |
+| Energy | 0.5030 | -0.3290 |
+| Speechiness | 0.1672 | 0.1992 |
+| Acousticness | -0.4616 | 0.2821 |
+| Instrumentalness | -0.3842 | -0.1008 |
+| Liveness | 0.0861 | -0.4583 |
+| Valence | 0.4157 | 0.2530 |
+| Tempo | 0.1303 | -0.4457 |
+
+（註：若程式以平台分別計算 PCA，亦會列印各平台對應的 explained variance 與 loadings；可參考程式輸出作更細節解讀。）
+
+- 相關性分析：
+	- 計算每個音訊特徵與平台人氣（Spotify 的 `Stream`、YouTube 的 `Views`）間的 Pearson 相關係數，並以長條圖與熱圖呈現正/負相關強度。
 
 **欄位（Columns）說明**
-- **Artist**: 曲目或單位所屬藝人名稱。
-- **Track / Title**: 歌曲名稱或曲目標題。
-- **Channel**: 上傳頻道（通常為 YouTube 頻道名）。
-- **Url_youtube**: YouTube 影片連結。
-- **Views**: YouTube 的觀看次數（代表平台人氣）。
-- **Stream**: Spotify 的串流次數（代表平台人氣）。
-- **Likes**: YouTube 的按讚數（互動指標）。
-- **Comments**: YouTube 的留言數（互動指標）。
-- **Valence**: 音樂情緒分數（通常 0–1，數值越高表示越愉悅/正向）。
-- **Danceability**: 舞曲性（0–1），表示可舞動程度。
-- **Energy**: 能量（0–1），表示強度與活動度。
-- **Speechiness**: 語音性比例（0–1），值越高代表語音/朗讀元素較多。
-- **Acousticness**: 原音比例（0–1），值越高表示越偏原聲音色。
-- **Instrumentalness**: 器樂化程度（0–1），高值表示較少人聲。
-- **Liveness**: 現場感（0–1），高值通常代表錄音中包含現場表演特徵。
-- **Tempo**: 節拍（BPM，數值）。
-- **Duration_ms**: 曲長（毫秒）。
-- **Key**: 調性（數值編碼），若有提供的話。
-- **Loudness**: 音量（dB），通常為負值。
-- **Licensed**, **official_video**: 版權或官方影片標記（若資料中有）。
 
-**程式內重要參數與行為**
-- `target_n`：平衡抽樣大小（程式預設 2500，表示每平台、每情緒最多抽 2500 筆）。
-- `k`：K-Means 預設分群數（程式裡多處預設為 4，可改成先跑 Elbow 再選 k）。
-- 圖檔儲存檔名：存於 `information`，檔名前有數字前綴以避免覆寫（例如 `01_spotify_valence_trend.png`）。
+- `Artist`：曲目或作品所屬藝人。
+- `Track` / `Title`：歌曲標題。
+- `Channel`：YouTube 上傳頻道名稱。
+- `Url_youtube`：YouTube 影片連結。
+- `Views`：YouTube 觀看次數（整數）。
+- `Stream`：Spotify 串流次數（整數）。
+- `Likes`：YouTube 按讚數（整數）。
+- `Comments`：YouTube 留言數（整數）。
+- `Valence`：情緒分數（通常 0–1，越高表示越正向/愉悅）。
+- `Danceability`、`Energy`、`Speechiness`、`Acousticness`、`Instrumentalness`、`Liveness`：常見 0–1 音訊特徵，代表音色/編曲特性。
+- `Tempo`：節拍（BPM）。
+- `Duration_ms`：曲長（毫秒）。
+- `Key`：調性編碼（若資料提供）。
+- `Loudness`：平均響度（dB，通常為負值）。
+- `Licensed`、`official_video`：布林或標記類欄位，代表版權或是否官方影片（若資料提供）。
 
-若要我把這段說明整合回 `README.md` 的特定位置或把欄位定義改成對應你手頭 CSV 的實際欄位名稱（若不同），我可以依你的檔案精確調整。 
+**產出圖表解說（每張圖的 X / Y 軸與讀法）**
 
-可自訂的地方
--
-- 若要變更輸入 CSV 路徑，可打開 `music_phase4.py`，在 `main()` 的 `csv_path` 參數修改預設值。
-- 若要變更輸出資料夾，修改 `output_dir` 的值（程式頂部附近）。
-- 若不希望程式寫入 PNG（僅在 memory 顯示），可改造 `save_fig()` 與 `show_saved_images_nonblocking()`，我可以協助修改。
-- 若要自動 commit 或上傳圖檔，請告訴我你的 git 工作流程，我可以幫你加入範例指令。
+- Valence 趨勢圖（`valence` vs 平台人氣）：
+	- X 軸：`Valence` 分箱（範圍 0.0–1.0，預設分 10 箱）或箱中點值。
+	- Y 軸：平台內 Min–Max 正規化人氣（`norm_Stream` 或 `norm_Views`），範圍 0–1；較高值代表相對於該平台其他曲目的高人氣。
+	- 讀法：比較相同 Valence 位置上 Spotify 與 YouTube 的曲線差異，可看情緒與平台人氣偏好。
 
-疑難排解
--
-- 出現 `ModuleNotFoundError`：請確認已啟用虛擬環境，並執行安裝命令（參見上方安裝步驟）。
-- 圖片無法顯示：Windows 下請確認 matplotlib 的後端可開視窗（一般預設可用），若在遠端或 headless 環境會失敗。
+- 情緒（Mood）比較長條圖（平衡抽樣後）：
+	- X 軸：情緒類別（`Sad`、`Neutral`、`Happy`）。
+	- Y 軸：平均 `log1p` 人氣（Spotify 用 `Stream`、YouTube 用 `Views`）；以 log1p 減少極端值影響。
+	- 讀法：條形高度顯示情緒對平均人氣的影響，誤差線（若有）表示群內變異。
 
-聯絡/下一步
--
-需要我幫你：
-- 把 `requirements.txt` 加入 repo 並 commit（我可代為產生 commit）。
-- 讓程式支援 CLI 參數（直接傳入 CSV 路徑）。
-- 取消中間 PNG 檔改為直接 subplot 顯示以節省磁碟空間。
+- Elbow 圖（選擇 K 的依據）：
+	- X 軸：群數 `k`。
+	- Y 軸：K-Means 的 Inertia（SSE，平方和誤差）。
+	- 讀法：尋找 Inertia 明顯減緩（肘點）的 `k` 作為合理群數候選。
 
----
-檔案已建立於 `C:\Users\cj6ru8cl6\Desktop\nschool\README.md`。
+- PCA 散佈圖（群內分布）：
+	- X 軸 / Y 軸：第一與第二主成分（`PC1`, `PC2`），單位為標準化後的主成分得分。
+	- 顏色：KMeans 分群編號；點大小：以 `log1p(popularity)` 表示（如 `log1p(Stream)` 或 `log1p(Views)`），以視覺化群內人氣差異。
+	- 讀法：觀察群之間在主要變異方向上的分離與群內人氣集中情形。
 
+- 族群特徵熱圖（cluster × feature）：
+	- X 軸：音訊特徵名稱（例如 `Danceability`, `Energy`, …）。
+	- Y 軸：群編號（Cluster 0,1,2,…）。
+	- 色彩值：該群在該特徵上的平均值（通常為 z-score 或標準化後的平均），便於比較不同特徵在各群中的相對高低。
+	- 讀法：找出每個群的特徵型態（例如高 Energy、低 Acousticness 的群），並與該群人氣一起解釋。
+
+- 相關性長條圖 / 熱圖（feature vs popularity）：
+	- X 軸（長條圖）：音訊特徵名稱；Y 軸：Pearson 相關係數 r（介於 -1 到 1），代表該特徵與平台人氣的線性相關強度。
+	- 熱圖則以顏色呈現同樣的相關係數矩陣（行：特徵，列：人氣指標如 `log1p(Stream)` / `log1p(Views)`）。
+	- 讀法：正值表正相關（特徵越高人氣越高），負值則代表負相關；數值大小表示相關強度。
+
+以上產出多數會註明所用的人氣度量（`norm_*` vs `log1p(*)`），圖檔名稱中也含有說明（例如 `*_valence_trend.png`, `*_pca_clusters.png` 等），可依檔名前綴快速對應圖表內容。
