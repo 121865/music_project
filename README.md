@@ -103,6 +103,13 @@ Url_youtube         470
 
 4. Valence 分箱與趨勢圖
 	- 將 `Valence` 分為 10 箱，計算每箱平均人氣並繪製趨勢圖（Spotify / YouTube / 交叉比較）。
+	- 產生圖檔:
+
+```
+01_spotify_valence_trend.png   # Spotify 單一平台 valence 趨勢
+02_youtube_valence_trend.png   # YouTube 單一平台 valence 趨勢
+03_crossplatform_valence_trend.png  # 交叉平台比較曲線
+```
 
 5. 平衡抽樣（情緒層級）與情緒比較圖
 	- 使用 `balanced_sample_per_mood()` 在每個情緒類別（Sad / Neutral / Happy）中各抽樣最多 `target_n` 筆（範例 `target_n=2500`），以避免樣本不均造成偏誤。
@@ -167,6 +174,68 @@ Energy                            0.003                 0.068
 9. 圖檔輸出與顯示
 	- 所有圖檔會儲存在 `information` 資料夾（程式會自動建立），檔名前綴含順序編號，例如 `01_spotify_valence_trend.png`。
 	- 程式最後會以獨立 matplotlib 視窗同時開啟所有已儲存的 PNG，並在終端等待使用者按 Enter 後關閉視窗。
+
+常見輸出圖檔對應清單（程式中 `save_fig(...)` 產生）
+
+```
+01_spotify_valence_trend.png      # plot_valence_trends -> Spotify trend
+02_youtube_valence_trend.png      # plot_valence_trends -> YouTube trend
+03_crossplatform_valence_trend.png# plot_valence_trends -> cross-platform
+04_pop_by_mood.png                 # plot_pop_by_mood -> mood comparison (balanced)
+05_elbow_k.png                     # plot_clustering_overview -> Elbow
+06_clusters_pca.png                # plot_clustering_overview -> PCA scatter (clusters)
+07_avg_pop_by_cluster.png          # plot_clustering_overview -> avg popularity by cluster
+08_cluster_feature_heatmaps.png    # plot_platform_specific_clusterings -> heatmaps
+09_pca_platforms.png               # plot_platform_specific_clusterings -> platform PCA plots
+10_feature_pop_corr.png            # plot_feature_correlations -> feature vs popularity bars
+11_yt_interaction_vs_features.png  # plot_feature_correlations -> likes/comments vs features heatmap
+```
+
+關鍵程式片段（方便對照程式實作）
+
+- 補值（`impute_likes_and_stream`）核心邏輯（簡化）：
+
+```python
+# estimate like/view ratio and fill Likes
+mask = df['Likes'].notna() & df['Views'].gt(0)
+ratio = (df.loc[mask,'Likes'] / df.loc[mask,'Views']).mean()
+df.loc[df['Likes'].isna() & df['Views'].gt(0),'Likes'] = (df['Views'] * ratio).round()
+
+# artist-level Stream/Views median, fallback to global median
+sv = df.loc[df['Stream'].notna() & df['Views'].gt(0), ['Artist','Stream','Views']]
+artist_ratio = (sv['Stream']/sv['Views']).groupby(sv['Artist']).median()
+global_ratio = (sv['Stream']/sv['Views']).median()
+to_fill = df.loc[df['Stream'].isna() & df['Views'].gt(0), ['Artist','Views']]
+to_fill['ratio'] = to_fill['Artist'].map(artist_ratio).fillna(global_ratio)
+df.loc[to_fill.index,'Stream'] = (to_fill['Views'] * to_fill['ratio']).round()
+```
+
+- 平衡抽樣（`balanced_sample_per_mood`）使用示例：
+
+```python
+spotify_bal = balanced_sample_per_mood(spotify_df, 'Mood', target_n, 'log_Stream', seed=42)
+youtube_bal = balanced_sample_per_mood(youtube_df, 'Mood', target_n, 'log_Views', seed=42)
+```
+
+- PCA 及 loading 列印（程式中已有）：
+
+```python
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_scaled)
+print('Explained variance:', pca.explained_variance_ratio_)
+for i, comp in enumerate(pca.components_,1):
+	print('PC', i, dict(zip(features, comp)))
+```
+
+- 儲存與同時顯示（save_fig / show_saved_images_nonblocking）示例：
+
+```python
+plt.plot(...)  # 畫好圖
+save_fig('03_crossplatform_valence_trend.png')
+
+# 最後同時打開已儲存的圖檔
+show_saved_images_nonblocking()
+```
 
 上面輸出來源於一次實際執行，實際數值會因 CSV 內容不同而改變。
 **程式內容（資料處理方法）**
