@@ -69,6 +69,106 @@ C:\Users\cj6ru8cl6\Desktop\nschool> .\.venv\Scripts\Activate.ps1
 - `plot_feature_correlations(df)`：欄位與人氣的相關係數與熱圖。
 - `save_fig(name)`：將目前圖表儲存到 `information`，並把路徑加入內部清單以供最後顯示。
 - `show_saved_images_nonblocking()`：將已存的每張 PNG 以獨立視窗同時顯示，並等待 Enter 關閉視窗。
+**實作流程與結果（依執行順序）**
+
+1. 讀取資料與型別轉換
+	- 使用 `pandas.read_csv()` 讀入 CSV，並對 `Likes`、`Views`、`Stream`、`Valence` 等欄位做 `pd.to_numeric(..., errors='coerce')`。
+	- 範例輸出（缺失值檢查）會列印各欄缺失數量，範例：
+
+```
+▶ 前置處理後缺失值
+Description         876
+Stream              576
+Comments            569
+Likes               541
+Url_youtube         470
+...
+```
+
+2. Likes / Stream 補值（`impute_likes_and_stream`）
+	- Likes：以現有 `Likes/Views` 比率估算缺失 `Likes`（只含 Views>0）。
+	- Stream：計算每位 `Artist` 的 `Stream/Views` 中位數，優先用藝人中位數補值；若無則用全域中位數。
+	- 範例輸出（補值統計）：
+
+```
+估計的 like_view_ratio = 0.012249
+→ 依比例補 Likes 筆數：71
+全域 Stream/Views 中位比例 = 3.158846
+→ 依藝人比例補 Stream 筆數：555
+```
+
+3. 數值變換與正規化
+	- 對人氣欄位使用 `np.log1p()`（產生 `log_Stream`、`log_Views`）以減少長尾影響。
+	- 對平台內比較使用 Min–Max 正規化（`minmax()`），產生 `norm_Stream`、`norm_Views`（0–1）。
+
+4. Valence 分箱與趨勢圖
+	- 將 `Valence` 分為 10 箱，計算每箱平均人氣並繪製趨勢圖（Spotify / YouTube / 交叉比較）。
+
+5. 平衡抽樣（情緒層級）與情緒比較圖
+	- 使用 `balanced_sample_per_mood()` 在每個情緒類別（Sad / Neutral / Happy）中各抽樣最多 `target_n` 筆（範例 `target_n=2500`），以避免樣本不均造成偏誤。
+	- 範例抽樣分佈輸出：
+
+```
+Spotify 抽樣分佈：
+Happy / Positive      2500
+Neutral / Moderate    2500
+Sad / Negative        2500
+
+YouTube 抽樣分佈：
+Neutral / Moderate    2500
+Happy / Positive      2500
+Sad / Negative        2500
+```
+
+6. 分群分析（Elbow、K-Means、PCA）
+	- 對音訊特徵做標準化（Z-score），以 `KMeans`（預設 k=4）分群並使用 PCA(2) 做視覺化投影。
+	- 程式會產生 Elbow 圖幫助判斷群數，並列印每群平均特徵與群內平均人氣（log scale）。
+	- 範例 PCA 輸出（整體）：
+
+```
+PCA explained variance ratio (overall): [0.30616254 0.1490607 ]
+PCA loadings (components):
+ PC1:
+	Danceability: 0.4015
+	Energy: 0.5030
+	...
+```
+
+7. 平台別分群比較
+	- 對 Spotify / YouTube 各自進行補值（median）、標準化、分群與 PCA，產生各平台的 heatmap 與 PCA 投影圖。
+	- 範例群內人氣（log scale）輸出：
+
+```
+🎧 Spotify 各群平均人氣 (log1p Stream)：
+0    19.045
+1    18.774
+2    18.305
+3    18.673
+
+📺 YouTube 各群平均人氣 (log1p Views)：
+0    18.542
+1    18.144
+2    16.284
+3    18.333
+```
+
+8. 特徵與人氣相關性分析
+	- 計算每個音訊特徵與平台人氣（Stream / Views）之 Pearson 相關係數，並用長條圖 / 熱圖呈現。
+	- 範例輸出（部分）：
+
+```
+🎯 音樂特徵與人氣的相關性比較：
+						Spotify (Stream Corr)  YouTube (Views Corr)
+Danceability                     -0.000                 0.089
+Energy                            0.003                 0.068
+...
+```
+
+9. 圖檔輸出與顯示
+	- 所有圖檔會儲存在 `information` 資料夾（程式會自動建立），檔名前綴含順序編號，例如 `01_spotify_valence_trend.png`。
+	- 程式最後會以獨立 matplotlib 視窗同時開啟所有已儲存的 PNG，並在終端等待使用者按 Enter 後關閉視窗。
+
+以上順序即為 `music_phase4.py` 的主要執行流程；上面範例輸出來源於一次實際執行，實際數值會因 CSV 內容不同而改變。
 **程式內容（資料處理方法）**
 
 使用 `pandas.read_csv()` 讀入 `Spotify_Youtube.csv`，對下列流程做處理：
