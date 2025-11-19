@@ -71,7 +71,7 @@ C:\Users\cj6ru8cl6\Desktop\nschool> .\.venv\Scripts\Activate.ps1
 - `show_saved_images_nonblocking()`：將已存的每張 PNG 以獨立視窗同時顯示，並等待 Enter 關閉視窗。
 - 
 ### **實作流程與結果（依執行順序）**
--
+
 1. 讀取資料與型別轉換
 	- 使用 `pandas.read_csv()` 讀入 CSV，並對 `Likes`、`Views`、`Stream`、`Valence` 等欄位做 `pd.to_numeric(..., errors='coerce')`。
 	- 輸出（缺失值檢查）會列印各欄缺失數量，範例：
@@ -240,7 +240,7 @@ show_saved_images_nonblocking()
 
 上面輸出來源於一次實際執行，實際數值會因 CSV 內容不同而改變。  
 ### **程式內容（資料處理方法）**
--
+
 使用 `pandas.read_csv()` 讀入 `Spotify_Youtube.csv`，對下列流程做處理：
 
 - 讀取與型別轉換：針對數值欄位（例：`Likes`, `Views`, `Stream`, `Valence` 等）使用 `pd.to_numeric(..., errors='coerce')`，把不能轉為數值的值設為 `NaN`，以利統一補值處理。
